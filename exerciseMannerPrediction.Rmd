@@ -12,6 +12,7 @@ library("dplyr")
 library("ggplot2")
 library("caret")
 library("randomForest")
+library("formattable")
 ```
 #Introduction
 One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, using data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants, a model is created to predict the quality of the exercise.
@@ -90,6 +91,11 @@ validationClasse <- tr2[-intrain,54]
 md <- randomForest(predictors,predictorsClasse, nodesize = 10, ntree = 200)
 
 print(md)
+```
+
+The model has an OOB estimate of  error rate: `r percent(as.numeric(md$err.rate[200,"OOB"]))`
+
+```{r}
 plot(md)
 ```
 
@@ -97,8 +103,11 @@ plot(md)
 ```{r}
 pred <- validation[,rownames(import)]
 validationPred <- predict(md, validation)
-confusionMatrix(validationPred, validationClasse)
+cm <- confusionMatrix(validationPred, validationClasse)
+cm
 ```
+Based on the validation, the modal has an `r percent(as.numeric(cm$overall[1]))` accuracy
+
 
 ##Prediction testset
 ```{r prediction}
