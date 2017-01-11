@@ -1,0 +1,109 @@
+---
+title: "Exercise Manner Prediction"
+author: "M. Klein"
+date: "11-1-2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("plyr")
+library("dplyr")
+library("ggplot2")
+library("caret")
+library("randomForest")
+```
+#Introduction
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, using data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants, a model is created to predict the quality of the exercise.
+
+#Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+#Data
+
+##Loading the data
+
+The data consists of a training set and a test set. The test set has no classifier, the final modal will be use to predict the quality of the exercise for the test set.
+```{r}
+if (!file.exists("pml-training.csv")) 
+    download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",
+                  "pml-training.csv", method="curl")
+if (!file.exists("pml-testing.csv")) 
+    download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",
+                  "pml-testing.csv", method="curl")
+
+training <- read.csv("pml-training.csv")
+testing <- read.csv("pml-testing.csv")
+```
+
+##Cleaning data
+
+The data contans lot's of rows without data of a very high percentage of NA. Als rows with more then 97% NA's are remove from the dataset's. This results in a dataset of 53 predictores and one classifier 
+```{r}
+tr2 <- training[, colSums(sapply(training, is.na))/nrow(training) < .97]
+tr2 <- tr2[, colSums(sapply(tr2, function(x) x ==""))/nrow(training) < .97]
+tr2 <- tr2 %>% select(-c(X, cvtd_timestamp, raw_timestamp_part_1, raw_timestamp_part_2, new_window, num_window))
+nms <- names(tr2)
+tt2 <- testing[,nms[-which(nms=="classe")]]
+
+str(tr2)
+```
+
+#Feature selection
+
+Random Forest will be used to build the model. To determine the number of predictors to use 'Random Forest Cross-Valdidation for feature selection' (rfcv) is used on the training set.
+
+```{r features, cache=TRUE}
+set.seed(2017-01-11)
+rf.cv<-rfcv(tr2[,-54],tr2$class, cv.fold=10, nodesize=10, ntree=200)
+with(rf.cv, plot(n.var, error.cv, log="x", type="o", lwd=2))
+print(rf.cv$error.cv)
+```
+
+The result of rfcv() shows that using more than 13 predictors results only in a small decrease in the error rate. But using more predictors can result in overfitting. For the final model 13 predictor will be used.
+
+##Selection predictors
+
+To select the 13 most important predictors, the importance of the predictors must be determined. This is done by building an random forest model with all predictors and retrieve the importance of the predictors with 'importance(). This result in the following 13 predictors.
+
+```{r d, chache=TRUE}
+numPred = 13
+mdAll <- randomForest(tr2[,-54],tr2$classe, nodesize=10, ntree=200)
+import <- importance(mdAll)
+import <- import[order(import, decreasing=TRUE),,drop=FALSE]
+import <- import[1:numPred,,drop=FALSE]
+import
+```
+
+#Final Model
+
+The training set is split train (70%) and validation (30%) set. The final model is build with random forest on the 13 predictors on the train set and validated with the validation set.    
+ 
+```{r train, cach=TRUE}
+intrain <- createDataPartition(y=tr2$classe, p=0.7, list=FALSE)
+predictors <- tr2[intrain,rownames(import)]
+predictorsClasse <- tr2[intrain,54]
+validation <- tr2[-intrain,rownames(import)]
+validationClasse <- tr2[-intrain,54]
+
+md <- randomForest(predictors,predictorsClasse, nodesize = 10, ntree = 200)
+
+print(md)
+plot(md)
+```
+
+##Validation Results
+```{r}
+pred <- validation[,rownames(import)]
+validationPred <- predict(md, validation)
+confusionMatrix(validationPred, validationClasse)
+```
+
+##Prediction testset
+```{r prediction}
+test <- tt2[,rownames(import)]
+testPred <- predict(md, test)
+testPred
+```
+
