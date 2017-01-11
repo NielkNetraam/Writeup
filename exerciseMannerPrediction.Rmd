@@ -93,7 +93,7 @@ md <- randomForest(predictors,predictorsClasse, nodesize = 10, ntree = 200)
 print(md)
 ```
 
-The model has an OOB estimate of  error rate: `r percent(as.numeric(md$err.rate[200,"OOB"]))`
+The model has an OOB estimate of error rate (in sample error): `r percent(as.numeric(md$err.rate[200,"OOB"]))`
 
 ```{r}
 plot(md)
@@ -106,7 +106,7 @@ validationPred <- predict(md, validation)
 cm <- confusionMatrix(validationPred, validationClasse)
 cm
 ```
-Based on the validation, the modal has an `r percent(as.numeric(cm$overall[1]))` accuracy
+Based on the validation, the modal has an `r percent(as.numeric(cm$overall[1]))` accuracy, out sample error = `r percent(1-as.numeric(cm$overall[1]))`. The out of sample error is even better than expected (smaller than the in sample error)
 
 
 ##Prediction testset
