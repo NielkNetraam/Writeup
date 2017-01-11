@@ -1,1 +1,1 @@
-# Writeup
+# To view the HTML look at: https://nielknetraam.github.io/Writeup/exerciseMannerPrediction.html
