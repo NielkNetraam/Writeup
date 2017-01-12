@@ -13,6 +13,8 @@ library("ggplot2")
 library("caret")
 library("randomForest")
 library("formattable")
+library("parallel")
+library("doParallel")
 ```
 #Introduction
 One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, using data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants, a model is created to predict the quality of the exercise.
@@ -62,14 +64,23 @@ with(rf.cv, plot(n.var, error.cv, log="x", type="o", lwd=2))
 print(rf.cv$error.cv)
 ```
 
-The result of rfcv() shows that using more than 13 predictors results only in a small decrease in the error rate. But using more predictors can result in overfitting. For the final model 13 predictor will be used.
+```{r numpred, echo=FALSE, results="hide"}
+numPred = 26
+```
+
+To be able to predict the 20 cases in the testset correctly with a high probability the model should be very accurate. Each observation in the test data set is independent of the others. If a represents the accuracy of a machine learning model, then the probability of correctly predicting 20 out of 20 test cases with the model in question is a^20, because the probability of the total is equal to the product of the independent probabilities.
+
+To have at least 80% chanche to predict all 20 cases correctly, the model must have an accurancy of at least 99% (0.99 ^ 20 = `r percent(0.99^20)`). 
+
+The result of rfcv() shows that `r numPred` predictors give an error rate of `r percent(rf.cv$error.cv[2])` and a accurance of `r 1-percent(rf.cv$error.cv[2])`. Using more predictors only in a small decrease in the error rate but can result in overfitting. 
+
+For the final model `r numPred` predictors will be used.
 
 ##Selection predictors
 
-To select the 13 most important predictors, the importance of the predictors must be determined. This is done by building an random forest model with all predictors and retrieve the importance of the predictors with 'importance(). This result in the following 13 predictors.
+To select the 13 most important predictors, the importance of the predictors must be determined. This is done by building an random forest model with all predictors and retrieve the importance of the predictors with 'importance(). This result in the following `r numPred` predictors.
 
 ```{r d, chache=TRUE}
-numPred = 13
 mdAll <- randomForest(tr2[,-54],tr2$classe, nodesize=10, ntree=200)
 import <- importance(mdAll)
 import <- import[order(import, decreasing=TRUE),,drop=FALSE]
@@ -79,35 +90,32 @@ import
 
 #Final Model
 
-The training set is split train (70%) and validation (30%) set. The final model is build with random forest on the 13 predictors on the train set and validated with the validation set.    
- 
-```{r train, cach=TRUE}
+The final modal is created on the whole data set with cross validation.    
+
+```{r train2, chache=TRUE, warning=FALSE}
+cluster <- makeCluster(detectCores() - 1) # convention to leave 1 core for OS
+registerDoParallel(cluster)
+
+fitControl <- trainControl(method = "cv",
+                           number = 10,
+                           allowParallel = TRUE)
+
 intrain <- createDataPartition(y=tr2$classe, p=0.7, list=FALSE)
 predictors <- tr2[intrain,rownames(import)]
 predictorsClasse <- tr2[intrain,54]
 validation <- tr2[-intrain,rownames(import)]
 validationClasse <- tr2[-intrain,54]
+predictorsA <-  tr2[,rownames(import)]
 
-md <- randomForest(predictors,predictorsClasse, nodesize = 10, ntree = 200)
+md <- train(predictorsA,tr2$classe, method="rf", trControl = fitControl, nodesize = 10, ntree = 200)
 
 print(md)
 ```
 
-The model has an OOB estimate of error rate (in sample error): `r percent(as.numeric(md$err.rate[200,"OOB"]))`
-
 ```{r}
 plot(md)
 ```
-
-##Validation Results
-```{r}
-pred <- validation[,rownames(import)]
-validationPred <- predict(md, validation)
-cm <- confusionMatrix(validationPred, validationClasse)
-cm
-```
-Based on the validation, the modal has an `r percent(as.numeric(cm$overall[1]))` accuracy, out sample error = `r percent(1-as.numeric(cm$overall[1]))`. The out of sample error is even better than expected (smaller than the in sample error)
-
+The final modal uses mtry = `r as.numeric(md$bestTune)` with an accurancy of `r percent(md$results[md$results$mtry==as.numeric(md$bestTune),2])`. This is better than the minimal threshold of 99%. The in of sample error is `r percent(1-md$results[md$results$mtry==as.numeric(md$bestTune),2])`
 
 ##Prediction testset
 ```{r prediction}
@@ -115,4 +123,4 @@ test <- tt2[,rownames(import)]
 testPred <- predict(md, test)
 testPred
 ```
-
+The prediction of the model resulted in 100% score in the quiz. Out of sample error is 0%
